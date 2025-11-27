@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer">
+    <title>Dota 2 Oracle AI</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Rajdhani:wght@500;600;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'], display: ['Rajdhani', 'sans-serif'] },
+                    colors: { dark: "#0b0e14", panel: "#13161c", radiant: "#10b981", dire: "#ef4444" }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #0b0e14;
+            color: #e2e8f0;
+        }
+
+        .glass {
+            background: rgba(20, 25, 35, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #0f1115;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+
+        /* Animations */
+        .slot-active {
+            box-shadow: 0 0 0 1px currentColor, 0 0 15px currentColor;
+            border-color: currentColor;
+        }
+
+        @keyframes pulse-glow {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .animate-pulse-slow {
+            animation: pulse-glow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        /* Lane Selector Styling */
+        .lane-select {
+            appearance: none;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #aaa;
+            font-size: 0.65rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            outline: none;
+            cursor: pointer;
+            text-transform: uppercase;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+
+        .lane-select:hover {
+            border-color: rgba(255, 255, 255, 0.3);
+            color: white;
+        }
+
+        .lane-select option {
+            background: #111;
+            color: white;
+        }
+
+        /* Hero Grid Gap Fix */
+        .picker-grid {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            align-content: start;
+        }
+
+        /* Log Styling */
+        .log-entry {
+            font-family: monospace;
+            font-size: 0.7rem;
+            margin-bottom: 2px;
+            color: #888;
+        }
+
+        .log-entry span {
+            color: #fff;
+            font-weight: bold;
+        }
+
+        .log-time {
+            color: #555;
+            margin-right: 5px;
+        }
+    </style>
+</head>
+
+<body class="h-screen w-screen flex overflow-hidden text-sm bg-dark">
+
+    <!-- LEFT PANEL: MAIN APP -->
+    <div class="flex-1 flex flex-col p-4 gap-4 min-w-[700px] overflow-hidden relative">
+
+        <!-- HEADER -->
+        <header class="flex justify-between items-center glass p-4 rounded-xl shrink-0">
+            <div class="flex items-center gap-3">
+                <div
+                    class="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                    <i class="fa-solid fa-brain text-white text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="font-display text-2xl font-bold tracking-widest text-white leading-none">
+                        DOTA<span class="text-indigo-400">PREDICTOR</span>
+                    </h1>
+                    <div class="text-[10px] text-slate-400 font-mono tracking-widest uppercase">Deep Learning Model
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-4">
+                <div class="flex flex-col items-end">
+                    <label class="text-[10px] uppercase font-bold text-slate-500 tracking-wider mb-1">Rank Tier</label>
+                    <select id="rankSelect" onchange="onRankChange(this)"
+                        class="bg-slate-800 border border-slate-700 text-white text-xs rounded px-3 py-1.5 outline-none focus:border-indigo-500 transition-colors cursor-pointer">
+                        <option value="1">Herald</option>
+                        <option value="2">Guardian</option>
+                        <option value="3">Crusader</option>
+                        <option value="4">Archon</option>
+                        <option value="5" selected>Legend</option>
+                        <option value="6">Ancient</option>
+                        <option value="7">Divine</option>
+                        <option value="8">Immortal</option>
+                    </select>
+                </div>
+                <div class="h-8 w-px bg-slate-700"></div>
+                <button onclick="resetDraft()" class="text-slate-400 hover:text-white transition px-2"
+                    title="Reset Draft">
+                    <i class="fa-solid fa-rotate-right text-lg"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- PREDICTION BAR -->
+        <div class="glass p-1 rounded-full flex h-12 relative overflow-hidden shadow-2xl shrink-0">
+            <div id="radiantBar"
+                class="h-full bg-gradient-to-r from-emerald-900 to-emerald-500 flex items-center justify-center font-display font-bold text-xl text-white transition-all duration-700 w-1/2">
+                50%
+            </div>
+            <div id="direBar"
+                class="h-full bg-gradient-to-l from-red-900 to-red-500 flex items-center justify-center font-display font-bold text-xl text-white transition-all duration-700 w-1/2">
+                50%
+            </div>
+            <div
+                class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-slate-900 rounded-full border-2 border-slate-700 flex items-center justify-center z-10 font-black italic text-slate-500 text-xs">
+                VS</div>
+        </div>
+
+        <!-- Analysis Text -->
+        <div class="glass p-3 rounded-lg border border-indigo-500/20 text-center relative overflow-hidden shrink-0">
+            <div class="absolute top-0 left-0 w-1 h-full bg-indigo-500"></div>
+            <div class="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-1">AI Analysis</div>
+            <div id="predictionReason" class="text-sm text-slate-200 font-medium">
+                Draft full teams to generate prediction insight...
+            </div>
+        </div>
+
+        <!-- DRAFT BOARD (Scrollable Area) -->
+        <div class="flex gap-4 flex-1 overflow-y-auto pr-1">
+            <!-- RADIANT -->
+            <div class="flex-1 flex flex-col gap-2">
+                <div class="flex justify-between items-center px-2 pb-2 border-b border-emerald-500/20">
+                    <h2 class="font-display text-lg font-bold text-emerald-400 flex items-center gap-2">
+                        <i class="fa-brands fa-envira"></i> RADIANT
+                    </h2>
+                </div>
+                <div id="radiantSlots" class="flex flex-col gap-2"></div>
+            </div>
+
+            <!-- DIRE -->
+            <div class="flex-1 flex flex-col gap-2">
+                <div class="flex justify-between items-center px-2 pb-2 border-b border-red-500/20">
+                    <h2 class="font-display text-lg font-bold text-red-400 flex items-center gap-2">
+                        <i class="fa-solid fa-fire"></i> DIRE
+                    </h2>
+                </div>
+                <div id="direSlots" class="flex flex-col gap-2"></div>
+            </div>
+        </div>
+
+        <!-- FOOTER CONTROLS -->
+        <div class="grid grid-cols-3 gap-4 shrink-0 h-32">
+
+            <!-- 1. DATA WIDGET -->
+            <div class="glass p-4 rounded-xl flex flex-col justify-between border-l-2 border-slate-600">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <div class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Database Size</div>
+                        <div class="font-display text-2xl font-bold text-white" id="matchCount">0</div>
+                    </div>
+                    <div id="statusIndicator"
+                        class="text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-1.5">
+                        <div class="w-1.5 h-1.5 rounded-full bg-slate-500"></div> Idle
+                    </div>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="toggleFetcher(true)"
+                        class="flex-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 py-1.5 rounded text-xs font-bold transition">
+                        RESUME
+                    </button>
+                    <button onclick="toggleFetcher(false)"
+                        class="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 py-1.5 rounded text-xs font-bold transition">
+                        PAUSE
+                    </button>
+                </div>
+            </div>
+
+            <!-- 2. AI WIDGET -->
+            <div class="glass p-4 rounded-xl flex flex-col justify-between border-l-2 border-indigo-500">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <div class="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">Model Status</div>
+                        <div class="font-display text-sm font-bold text-white mt-1" id="modelTrainedCount">Not Trained
+                        </div>
+                        <div class="text-[10px] text-slate-400 mt-0.5" id="modelAccuracy"></div>
+                    </div>
+                    <i class="fa-solid fa-microchip text-indigo-500 text-lg"></i>
+                </div>
+
+                <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden mb-2">
+                    <div id="trainProgress" class="bg-indigo-500 h-full w-0 transition-all duration-300"></div>
+                </div>
+
+                <button onclick="startTraining()" id="btnTrain"
+                    class="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-1.5 rounded font-bold text-xs shadow-lg shadow-indigo-500/20 transition-all">
+                    RETRAIN MODEL
+                </button>
+            </div>
+
+            <!-- 3. LIVE LOG WIDGET (NEW) -->
+            <div class="glass p-3 rounded-xl flex flex-col border-l-2 border-emerald-500/50 relative overflow-hidden">
+                <div
+                    class="text-[10px] font-bold text-emerald-500/70 uppercase tracking-wider mb-2 flex items-center gap-2">
+                    <i class="fa-solid fa-terminal"></i> System Logs
+                </div>
+                <div id="liveLogs" class="flex-1 overflow-y-auto pr-1 flex flex-col-reverse">
+                    <div class="log-entry"><span class="log-time">System:</span><span>Ready.</span></div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- RIGHT PANEL: HERO PICKER -->
+    <div class="w-[380px] bg-[#111] border-l border-white/5 flex flex-col z-10 shadow-2xl shrink-0">
+        <!-- Search -->
+        <div class="p-4 border-b border-white/5 bg-[#161920]">
+            <div class="relative">
+                <i
+                    class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
+                <input type="text" id="heroSearch" onkeyup="filterHeroes()" placeholder="Find Hero..."
+                    class="w-full bg-black/40 text-white pl-9 pr-3 py-2.5 rounded-lg border border-white/10 focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 outline-none transition-all placeholder-slate-600 font-sans text-xs">
+            </div>
+        </div>
+
+        <!-- Hero Grid -->
+        <div id="heroPickerGrid" class="picker-grid">
+            <!-- JS injects heroes here -->
+        </div>
+
+        <!-- Footer -->
+        <div class="p-2 border-t border-white/5 text-center text-[10px] text-slate-600 bg-[#0f1115]">
+            Data Source: OpenDota | Assets: Valve
+        </div>
+    </div>
+
+    <!-- JS Logic -->
+    <script>
+        const CDN_BASE = "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/heroes";
+        const HERO_DATA_URL = "https://cdn.jsdelivr.net/gh/odota/dotaconstants@master/build/heroes.json";
+
+        let allHeroes = [];
+        // Data Structure: { hero: Object, lane: Int } or null
+        let draft = {
+            radiant: [null, null, null, null, null],
+            dire: [null, null, null, null, null]
+        };
+        let activeSlot = { team: 'radiant', index: 0 };
+
+        // LOGGING FUNCTION
+        function uiLog(msg) {
+            const container = document.getElementById('liveLogs');
+            const time = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `<span class="log-time">[${time}]</span> ${msg}`;
+            container.prepend(entry); // Newest top
+            // Keep only last 50 logs
+            if (container.children.length > 50) container.lastChild.remove();
+        }
+
+        async function init() {
+            try {
+                const res = await fetch(HERO_DATA_URL);
+                if (!res.ok) throw new Error("Network Error");
+                const data = await res.json();
+                const rawHeroes = Object.values(data);
+
+                allHeroes = rawHeroes.map(h => ({
+                    id: h.id,
+                    name: h.localized_name,
+                    img: `${CDN_BASE}/${h.name.replace('npc_dota_hero_', '')}.png`
+                })).sort((a, b) => a.name.localeCompare(b.name));
+
+                renderBoard();
+                renderPicker();
+                setInterval(refreshStatus, 2000);
+                uiLog("System initialized. Hero database loaded.");
+
+            } catch (e) {
+                console.error(e);
+                uiLog(`<span style="color:#ef4444">ERROR: Failed to load heroes</span>`);
+            }
+        }
+
+        function renderBoard() {
+            renderTeam('radiant');
+            renderTeam('dire');
+        }
+
+        function renderTeam(team) {
+            const container = document.getElementById(`${team}Slots`);
+            container.innerHTML = '';
+
+            draft[team].forEach((slotData, idx) => {
+                const isActive = activeSlot.team === team && activeSlot.index === idx;
+                const laneVal = slotData ? slotData.lane : 0;
+
+                const el = document.createElement('div');
+                el.className = `
+                    h-16 rounded-md border flex items-center px-2 cursor-pointer transition-all relative overflow-hidden group select-none
+                    ${isActive
+                        ? `slot-active border-${team === 'radiant' ? 'emerald' : 'red'}-500/50 bg-white/5`
+                        : 'border-white/5 bg-white/5 hover:bg-white/10 hover:border-white/10'}
+                `;
+                el.onclick = (e) => {
+                    if (e.target.tagName !== 'SELECT' && !e.target.closest('.remove-btn')) {
+                        activeSlot = { team, index: idx }; renderBoard();
+                    }
+                };
+
+                if (slotData && slotData.hero) {
+                    const h = slotData.hero;
+                    el.innerHTML = `
+                        <img src="${h.img}" class="w-16 h-10 object-cover rounded shadow bg-black mr-3">
+                        <div class="flex-1 min-w-0">
+                            <div class="font-bold text-xs text-slate-200 truncate">${h.name}</div>
+                            <select class="lane-select mt-1" onchange="updateLane('${team}', ${idx}, this.value)">
+                                <option value="0" ${laneVal == 0 ? 'selected' : ''}>ANY</option>
+                                <option value="1" ${laneVal == 1 ? 'selected' : ''}>SAFE</option>
+                                <option value="2" ${laneVal == 2 ? 'selected' : ''}>MID</option>
+                                <option value="3" ${laneVal == 3 ? 'selected' : ''}>OFF</option>
+                                <option value="4" ${laneVal == 4 ? 'selected' : ''}>ROAM</option>
+                            </select>
+                        </div>
+                        <button onclick="removeHero('${team}', ${idx}); event.stopPropagation()" 
+                            class="remove-btn absolute right-2 top-2 text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    `;
+                } else {
+                    el.innerHTML = `
+                        <div class="w-16 h-10 rounded bg-black/20 flex items-center justify-center mr-3 text-slate-600 border border-white/5">
+                            <i class="fa-solid fa-plus text-[10px]"></i>
+                        </div>
+                        <span class="text-[10px] text-slate-600 uppercase font-bold tracking-wider">Empty</span>
+                    `;
+                }
+                container.appendChild(el);
+            });
+        }
+
+        function renderPicker() {
+            const grid = document.getElementById('heroPickerGrid');
+            const search = document.getElementById('heroSearch').value.toLowerCase();
+            grid.innerHTML = '';
+
+            const pickedIds = [...draft.radiant, ...draft.dire]
+                .filter(s => s && s.hero).map(s => s.hero.id);
+
+            allHeroes.forEach(hero => {
+                if (!hero.name.toLowerCase().includes(search)) return;
+
+                const isPicked = pickedIds.includes(hero.id);
+
+                const card = document.createElement('div');
+                card.className = `
+                    relative aspect-video bg-slate-800 rounded overflow-hidden cursor-pointer border border-transparent transition-transform hover:scale-105 hover:border-indigo-400 hover:z-10
+                    ${isPicked ? 'opacity-20 grayscale pointer-events-none' : ''}
+                `;
+                card.onclick = () => pickHero(hero);
+
+                card.innerHTML = `
+                    <img src="${hero.img}" loading="lazy" class="w-full h-full object-cover">
+                    <div class="absolute bottom-0 w-full bg-black/80 text-[9px] text-center text-slate-300 py-0.5 truncate px-1 pointer-events-none">
+                        ${hero.name}
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        function pickHero(hero) {
+            draft[activeSlot.team][activeSlot.index] = { hero: hero, lane: 0 };
+            uiLog(`Picked <span>${hero.name}</span> for ${activeSlot.team}`);
+
+            // Auto-advance
+            let nextIdx = -1;
+            for (let i = activeSlot.index + 1; i < 5; i++) {
+                if (draft[activeSlot.team][i] === null) { nextIdx = i; break; }
+            }
+            if (nextIdx !== -1) {
+                activeSlot.index = nextIdx;
+            } else {
+                const otherTeam = activeSlot.team === 'radiant' ? 'dire' : 'radiant';
+                for (let i = 0; i < 5; i++) {
+                    if (draft[otherTeam][i] === null) {
+                        activeSlot = { team: otherTeam, index: i };
+                        break;
+                    }
+                }
+            }
+
+            renderBoard();
+            renderPicker();
+            predict();
+        }
+
+        function updateLane(team, idx, val) {
+            if (draft[team][idx]) {
+                const lanes = ["ANY", "SAFE", "MID", "OFF", "ROAM"];
+                draft[team][idx].lane = parseInt(val);
+                uiLog(`Set lane <span>${lanes[val]}</span> for ${draft[team][idx].hero.name}`);
+                predict();
+            }
+        }
+
+        function onRankChange(el) {
+            uiLog(`Rank updated to <span>${el.options[el.selectedIndex].text}</span>`);
+            predict();
+        }
+
+        function removeHero(team, idx) {
+            const heroName = draft[team][idx].hero.name;
+            draft[team][idx] = null;
+            activeSlot = { team, index: idx };
+            uiLog(`Removed <span>${heroName}</span> from ${team}`);
+            renderBoard();
+            renderPicker();
+        }
+
+        function filterHeroes() { renderPicker(); }
+
+        function resetDraft() {
+            draft.radiant.fill(null);
+            draft.dire.fill(null);
+            activeSlot = { team: 'radiant', index: 0 };
+            uiLog("Draft reset");
+            renderBoard();
+            renderPicker();
+            updateBar(0.5);
+            document.getElementById('predictionReason').innerText = "Select heroes...";
+        }
+
+        // --- API ---
+        async function predict() {
+            const rData = draft.radiant.filter(s => s && s.hero);
+            const dData = draft.dire.filter(s => s && s.hero);
+
+            if (rData.length === 0 && dData.length === 0) return;
+
+            const payload = {
+                rank: parseInt(document.getElementById('rankSelect').value),
+                radiant: rData.map(s => s.hero.id),
+                dire: dData.map(s => s.hero.id),
+                radiantLanes: rData.map(s => s.lane),
+                direLanes: dData.map(s => s.lane)
+            };
+
+            try {
+                uiLog("Calculating prediction...");
+                const res = await fetch('/api/predict', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                updateBar(data.radiantWinProbability);
+                document.getElementById('predictionReason').innerText = data.reason;
+                const prob = (data.radiantWinProbability * 100).toFixed(1);
+                uiLog(`Prediction: Radiant <span>${prob}%</span>`);
+            } catch (e) { console.error(e); }
+        }
+
+        function updateBar(prob) {
+            const pct = Math.round(prob * 100);
+            document.getElementById('radiantBar').style.width = `${pct}%`;
+            document.getElementById('radiantBar').innerText = `${pct}%`;
+            document.getElementById('direBar').style.width = `${100 - pct}%`;
+            document.getElementById('direBar').innerText = `${100 - pct}%`;
+        }
+
+        async function refreshStatus() {
+            try {
+                const res = await fetch('/api/status');
+                const data = await res.json();
+
+                document.getElementById('matchCount').innerText = data.totalMatches.toLocaleString();
+
+                const ind = document.getElementById('statusIndicator');
+                if (data.isRunning) {
+                    ind.className = "text-[10px] px-2 py-1 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1.5";
+                    ind.innerHTML = `<div class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div> Active`;
+                } else {
+                    ind.className = "text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-1.5";
+                    ind.innerHTML = `<div class="w-1.5 h-1.5 rounded-full bg-slate-500"></div> Idle`;
+                }
+
+                const train = data.training;
+                const bar = document.getElementById('trainProgress');
+                const btn = document.getElementById('btnTrain');
+                const countLabel = document.getElementById('modelTrainedCount');
+                const accLabel = document.getElementById('modelAccuracy');
+
+                if (train.isTraining) {
+                    bar.style.width = `${train.progressPercent}%`;
+                    btn.disabled = true;
+                    btn.innerText = `TRAINING ${train.progressPercent}%`;
+                    btn.classList.add('opacity-50', 'cursor-not-allowed');
+                    countLabel.innerText = "Training...";
+                    accLabel.innerText = "";
+                } else {
+                    bar.style.width = '0%';
+                    btn.disabled = false;
+                    btn.innerText = "RETRAIN MODEL";
+                    btn.classList.remove('opacity-50', 'cursor-not-allowed');
+
+                    if (train.lastTrainedOnCount > 0) {
+                        countLabel.innerText = `Trained on ${train.lastTrainedOnCount.toLocaleString()} matches`;
+                        if (train.lastAccuracy > 0) {
+                            accLabel.innerText = `Accuracy: ${(train.lastAccuracy * 100).toFixed(1)}%`;
+                            accLabel.className = "text-[10px] text-emerald-400 mt-0.5 font-bold";
+                        }
+                    } else {
+                        countLabel.innerText = "Not Trained";
+                        accLabel.innerText = "";
+                    }
+                }
+            } catch (e) { }
+        }
+
+        async function toggleFetcher(run) {
+            await fetch(run ? '/api/fetcher/start' : '/api/fetcher/stop', { method: 'POST' });
+            uiLog(run ? "Data collection started" : "Data collection stopped");
+            refreshStatus();
+        }
+
+        async function startTraining() {
+            if (confirm("Start training?")) {
+                await fetch('/api/train', { method: 'POST' });
+                uiLog("Training sequence initiated");
+                refreshStatus();
+            }
+        }
+
+        init();
+    </script>
+</body>
+
+</html>
