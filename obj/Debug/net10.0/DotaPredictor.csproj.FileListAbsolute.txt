@@ -92,5 +92,5 @@ C:\dev\DotaPredictor\obj\Debug\net10.0\DotaPredictor.genruntimeconfig.cache
 C:\dev\DotaPredictor\obj\Debug\net10.0\ref\DotaPredictor.dll
 C:\dev\DotaPredictor\bin\Debug\net10.0\DotaPredictor.staticwebassets.runtime.json
 C:\dev\DotaPredictor\obj\Debug\net10.0\DotaPredictor.sourcelink.json
-C:\dev\DotaPredictor\obj\Debug\net10.0\compressed\batsc4zis2-{0}-nwvc5fe8jp-nwvc5fe8jp.gz
 C:\dev\DotaPredictor\bin\Debug\net10.0\knowledge_base.json
+C:\dev\DotaPredictor\obj\Debug\net10.0\compressed\batsc4zis2-{0}-e4qrvjv2v1-e4qrvjv2v1.gz

@@ -6,16 +6,16 @@ using Dapper;
 using DotaPredictor.Services;
 using System.Text.Json;
 using System.Collections.Concurrent;
+using System.Globalization;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // --- SERVICES ---
 builder.Services.AddHostedService<FetcherService>();
 builder.Services.AddHttpClient();
-// Реєструємо ModelEngine, система сама передасть туди Logger
 builder.Services.AddSingleton<ModelEngine>();
 
-// Налаштування логування (щоб було видно в консолі)
+// Використовуємо стандартний JSON (camelCase)
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 
@@ -26,23 +26,41 @@ app.UseStaticFiles();
 
 InitDatabase();
 
+void InitDatabase()
+{
+    using var connection = new SqliteConnection("Data Source=dota_data.db");
+    connection.Open();
+    connection.Execute(@"
+        CREATE TABLE IF NOT EXISTS Matches (
+            match_id INTEGER PRIMARY KEY, radiant_win BOOLEAN, start_time INTEGER,
+            duration INTEGER, avg_rank_tier INTEGER, radiant_team TEXT, dire_team TEXT, raw_json TEXT
+        )
+    ");
+}
+
 // --- API ---
 
 app.MapGet("/api/status", async (ModelEngine engine) => 
 {
     using var connection = new SqliteConnection("Data Source=dota_data.db");
-    // Оптимізація: Count(*) може бути повільним на великих даних в SQLite, 
-    // але для <1млн це ок.
-    var count = await connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Matches");
+    int count = 0;
+    int divineCount = 0;
+    try {
+        count = await connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Matches");
+        divineCount = await connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM Matches WHERE avg_rank_tier >= 70");
+    } catch {}
     
     return Results.Json(new { 
         totalMatches = count, 
+        highMmrMatches = divineCount,
         isRunning = !FetcherService.IsPaused,
-        // Повертаємо логи, які тепер включатимуть і тренування
         logs = FetcherService.Logs.ToArray(),
-        training = engine.GetState()
+        training = engine.GetState(),
+        metaDebug = engine.MetaInfo 
     });
 });
+
+app.MapGet("/api/heroes", (ModelEngine engine) => engine.GetHeroes());
 
 app.MapPost("/api/fetcher/start", () => { FetcherService.IsPaused = false; return Results.Ok(); });
 app.MapPost("/api/fetcher/stop", () => { FetcherService.IsPaused = true; return Results.Ok(); });
@@ -50,7 +68,6 @@ app.MapPost("/api/fetcher/stop", () => { FetcherService.IsPaused = true; return 
 app.MapPost("/api/train", (ModelEngine engine) => 
 {
     if (engine.GetState().IsTraining) return Results.BadRequest("Busy");
-    // Запуск в окремому потоці, щоб не блокувати API
     Task.Run(() => engine.Train());
     return Results.Ok("Started");
 });
@@ -66,12 +83,6 @@ app.MapPost("/api/predict", (PredictionRequest req, ModelEngine engine) =>
     else if (insight.Probability < 0.47) reasonText = "Dire slight statistical edge.";
     else reasonText = "Dead even. Skill matchup.";
 
-    if (insight.Factors.Any())
-    {
-        var topFactor = insight.Factors.OrderByDescending(f => Math.Abs(f.Impact)).First();
-        reasonText += $" Key: {topFactor.HeroId} ({(topFactor.Impact > 0 ? "+" : "")}{topFactor.Impact:P1})";
-    }
-
     return Results.Json(new { 
         radiantWinProbability = insight.Probability,
         reason = reasonText,
@@ -81,29 +92,40 @@ app.MapPost("/api/predict", (PredictionRequest req, ModelEngine engine) =>
 
 app.Run();
 
-void InitDatabase()
-{
-    using var connection = new SqliteConnection("Data Source=dota_data.db");
-    connection.Open();
-    connection.Execute(@"
-        CREATE TABLE IF NOT EXISTS Matches (
-            match_id INTEGER PRIMARY KEY, radiant_win BOOLEAN, start_time INTEGER,
-            duration INTEGER, avg_rank_tier INTEGER, radiant_team TEXT, dire_team TEXT, raw_json TEXT
-        )
-    ");
-}
-
 // --- DATA MODELS ---
 
 public class ModelInput
 {
     [LoadColumn(0)] public float Rank { get; set; }
-    [LoadColumn(1, 280)] [VectorType(280)] public float[]? Heroes { get; set; } 
-    [LoadColumn(281, 290)] [VectorType(10)] public float[]? Lanes { get; set; }
-    [LoadColumn(291)] public float SynergyRadiant { get; set; }
-    [LoadColumn(292)] public float SynergyDire { get; set; }
-    [LoadColumn(293)] public float CounterScore { get; set; }
-    [LoadColumn(294)] public bool Label { get; set; }
+    
+    // Вектор героїв (160 Radiant + 160 Dire = 320)
+    [LoadColumn(1, 320)] [VectorType(320)] public float[]? Heroes { get; set; } 
+
+    // Сила Драфту (середній вінрейт героїв)
+    [LoadColumn(321)] public float RadiantWinrateScore { get; set; }
+    [LoadColumn(322)] public float DireWinrateScore { get; set; }
+
+    [LoadColumn(323)] public float SynergyRadiant { get; set; }
+    [LoadColumn(324)] public float SynergyDire { get; set; }
+    [LoadColumn(325)] public float CounterScore { get; set; }
+    [LoadColumn(326)] public bool Label { get; set; }
+    [LoadColumn(327)] public float RadiantMetaScore { get; set; }
+    [LoadColumn(328)] public float DireMetaScore { get; set; }
+    [LoadColumn(329)] public float RadiantStuns { get; set; }
+    [LoadColumn(330)] public float DireStuns { get; set; }
+    [LoadColumn(331)] public float RadiantCores { get; set; }
+    [LoadColumn(332)] public float DireCores { get; set; }
+    [LoadColumn(333)] public float RadiantMelee { get; set; }
+    [LoadColumn(334)] public float DireMelee { get; set; }
+    [LoadColumn(335)] public float RadiantStr { get; set; }
+    [LoadColumn(336)] public float RadiantAgi { get; set; }
+    [LoadColumn(337)] public float RadiantInt { get; set; }
+    [LoadColumn(338)] public float DireStr { get; set; }
+    [LoadColumn(339)] public float DireAgi { get; set; }
+    [LoadColumn(340)] public float DireInt { get; set; }
+    
+    // Вага матчу для балансування
+    [LoadColumn(341)] public float Weight { get; set; } = 1f; 
 }
 
 public class ModelOutput
@@ -142,6 +164,17 @@ public class TrainingState
     public string Status { get; set; } = "Idle";
     public int LastTrainedOnCount { get; set; }
     public double LastAccuracy { get; set; }
+    public double LastAuc { get; set; }
+    public double LastF1 { get; set; }
+}
+
+public class HeroDef
+{
+    public int id { get; set; }
+    public string localized_name { get; set; } = "";
+    public string[] roles { get; set; } = Array.Empty<string>();
+    public string primary_attr { get; set; } = ""; 
+    public string attack_type { get; set; } = ""; 
 }
 
 // --- KNOWLEDGE BASE ---
@@ -149,6 +182,21 @@ public class KnowledgeBase
 {
     public Dictionary<string, float> SynergyMap { get; set; } = new();
     public Dictionary<string, float> CounterMap { get; set; } = new();
+    public Dictionary<int, float> HeroWinStats { get; set; } = new();
+    public Dictionary<int, HeroDef> Heroes { get; set; } = new();
+
+    public async Task EnsureHeroesLoaded(IHttpClientFactory httpClientFactory)
+    {
+        if (Heroes.Count > 100) return; 
+        try
+        {
+            using var client = httpClientFactory.CreateClient();
+            var json = await client.GetStringAsync("https://api.opendota.com/api/heroes");
+            var heroList = JsonSerializer.Deserialize<List<HeroDef>>(json);
+            if (heroList != null) Heroes = heroList.ToDictionary(h => h.id, h => h);
+        }
+        catch {}
+    }
 
     public void Build(List<(int[] r, int[] d, bool win)> matches)
     {
@@ -156,23 +204,25 @@ public class KnowledgeBase
         var pairTotal = new ConcurrentDictionary<string, int>();
         var counterWins = new ConcurrentDictionary<string, int>();
         var counterTotal = new ConcurrentDictionary<string, int>();
+        var heroPicks = new ConcurrentDictionary<int, int>();
+        var heroWins = new ConcurrentDictionary<int, int>();
 
         Parallel.ForEach(matches, match => 
         {
-            // Synergy
             for (int i = 0; i < match.r.Length; i++)
-                for (int j = i + 1; j < match.r.Length; j++)
-                {
-                    UpdatePair(match.r[i], match.r[j], match.win, pairWins, pairTotal);
-                }
-
+            {
+                int h1 = match.r[i];
+                heroPicks.AddOrUpdate(h1, 1, (_, v) => v + 1);
+                if (match.win) heroWins.AddOrUpdate(h1, 1, (_, v) => v + 1);
+                for (int j = i + 1; j < match.r.Length; j++) UpdatePair(match.r[i], match.r[j], match.win, pairWins, pairTotal);
+            }
             for (int i = 0; i < match.d.Length; i++)
-                for (int j = i + 1; j < match.d.Length; j++)
-                {
-                    UpdatePair(match.d[i], match.d[j], !match.win, pairWins, pairTotal);
-                }
-
-            // Counter
+            {
+                int h1 = match.d[i];
+                heroPicks.AddOrUpdate(h1, 1, (_, v) => v + 1);
+                if (!match.win) heroWins.AddOrUpdate(h1, 1, (_, v) => v + 1);
+                for (int j = i + 1; j < match.d.Length; j++) UpdatePair(match.d[i], match.d[j], !match.win, pairWins, pairTotal);
+            }
             foreach (var rHero in match.r)
                 foreach (var dHero in match.d)
                 {
@@ -183,53 +233,74 @@ public class KnowledgeBase
         });
 
         SynergyMap.Clear();
-        foreach (var kvp in pairTotal)
-        {
-            if (kvp.Value < 5) continue; 
-            float wr = (float)pairWins.GetValueOrDefault(kvp.Key, 0) / kvp.Value;
-            SynergyMap[kvp.Key] = wr - 0.5f; 
-        }
-
+        foreach (var kvp in pairTotal) { if (kvp.Value >= 30) SynergyMap[kvp.Key] = ((float)pairWins.GetValueOrDefault(kvp.Key, 0) / kvp.Value) - 0.5f; }
         CounterMap.Clear();
-        foreach (var kvp in counterTotal)
-        {
-            if (kvp.Value < 5) continue;
-            float wr = (float)counterWins.GetValueOrDefault(kvp.Key, 0) / kvp.Value;
-            CounterMap[kvp.Key] = wr - 0.5f;
-        }
+        foreach (var kvp in counterTotal) { if (kvp.Value >= 30) CounterMap[kvp.Key] = ((float)counterWins.GetValueOrDefault(kvp.Key, 0) / kvp.Value) - 0.5f; }
+        HeroWinStats.Clear();
+        foreach (var kvp in heroPicks) { if (kvp.Value >= 50) HeroWinStats[kvp.Key] = ((float)heroWins.GetValueOrDefault(kvp.Key, 0) / kvp.Value) - 0.5f; }
     }
 
     private void UpdatePair(int h1, int h2, bool win, ConcurrentDictionary<string, int> wins, ConcurrentDictionary<string, int> total)
     {
-        int min = Math.Min(h1, h2);
-        int max = Math.Max(h1, h2);
-        string key = $"{min}|{max}";
+        string key = $"{Math.Min(h1, h2)}|{Math.Max(h1, h2)}";
         total.AddOrUpdate(key, 1, (k, v) => v + 1);
         if (win) wins.AddOrUpdate(key, 1, (k, v) => v + 1);
     }
 
-    public float CalculateTeamSynergy(int[] team)
-    {
+    public float CalculateTeamSynergy(int[] team) {
         float score = 0;
         for (int i = 0; i < team.Length; i++)
             for (int j = i + 1; j < team.Length; j++)
-            {
-                int min = Math.Min(team[i], team[j]);
-                int max = Math.Max(team[i], team[j]);
-                if (SynergyMap.TryGetValue($"{min}|{max}", out float s)) score += s;
-            }
+                if (SynergyMap.TryGetValue($"{Math.Min(team[i], team[j])}|{Math.Max(team[i], team[j])}", out float s)) score += s;
         return score;
     }
 
-    public float CalculateCounterScore(int[] rad, int[] dire)
-    {
+    public float CalculateCounterScore(int[] rad, int[] dire) {
         float score = 0;
-        foreach (var r in rad)
-            foreach (var d in dire)
-            {
-                if (CounterMap.TryGetValue($"{r}|{d}", out float s)) score += s;
-            }
+        foreach (var r in rad) foreach (var d in dire) if (CounterMap.TryGetValue($"{r}|{d}", out float s)) score += s;
         return score;
+    }
+
+    public float CalculateMetaScore(int[] team) {
+        float score = 0;
+        foreach (var hero in team) if (HeroWinStats.TryGetValue(hero, out float s)) score += s;
+        return score;
+    }
+    
+    public float CalculateTeamWinrateScore(int[] team) {
+        float score = 0;
+        int count = 0;
+        foreach (var hero in team) {
+            if (HeroWinStats.TryGetValue(hero, out float s)) {
+                score += s;
+                count++;
+            }
+        }
+        return count > 0 ? score : 0;
+    }
+
+    public (float stuns, float cores) GetComposition(int[] team) {
+        float stuns = 0, cores = 0;
+        foreach (var id in team) {
+            if (Heroes.TryGetValue(id, out var h)) {
+                if (h.roles.Contains("Disabler")) stuns += 1.0f;
+                if (h.roles.Contains("Carry")) cores += 1.0f;
+            }
+        }
+        return (stuns, cores);
+    }
+
+    public (float melee, float str, float agi, float intel) GetAdvStats(int[] team) {
+        float melee = 0, str = 0, agi = 0, intel = 0;
+        foreach (var id in team) {
+            if (Heroes.TryGetValue(id, out var h)) {
+                if (h.attack_type == "Melee") melee += 1.0f;
+                if (h.primary_attr == "str") str += 1.0f;
+                if (h.primary_attr == "agi") agi += 1.0f;
+                if (h.primary_attr == "int") intel += 1.0f;
+            }
+        }
+        return (melee, str, agi, intel);
     }
 }
 
@@ -240,69 +311,90 @@ public class ModelEngine
     private readonly string _modelPath = "dota_model.zip";
     private readonly string _kbPath = "knowledge_base.json";
     
-    // LOGGER: Для виводу в консоль
     private readonly ILogger<ModelEngine> _logger;
+    private readonly IHttpClientFactory _httpClientFactory;
     
     private MLContext _mlContext;
     private ITransformer? _trainedModel;
     private PredictionEngine<ModelInput, ModelOutput>? _predEngine;
     private TrainingState _state = new();
     private KnowledgeBase _kb = new();
-    private const int TOTAL_HERO_ID_SLOTS = 140; 
+    public string MetaInfo { get; private set; } = "Not Loaded"; 
+    private const int TOTAL_HERO_ID_SLOTS = 160;
 
-    // Constructor Injection: Отримуємо логер автоматично
-    public ModelEngine(ILogger<ModelEngine> logger)
+    public ModelEngine(ILogger<ModelEngine> logger, IHttpClientFactory httpClientFactory)
     {
         _logger = logger;
+        _httpClientFactory = httpClientFactory;
         _mlContext = new MLContext(seed: 42);
         LoadModel();
     }
 
     public TrainingState GetState() => _state;
+    public Dictionary<int, HeroDef> GetHeroes() => _kb.Heroes;
 
-    // Helper: Пишемо і в консоль, і в чергу логів для UI
     private void LogInfo(string message)
     {
-        // 1. У консоль (Термінал)
         _logger.LogInformation(message);
-        
-        // 2. У чергу для UI (щоб бачити на сайті)
         var time = DateTime.Now.ToString("HH:mm:ss");
         FetcherService.Logs.Enqueue($"[{time}] [AI] {message}");
-        
-        // Чистимо старі логи
         if (FetcherService.Logs.Count > 100) FetcherService.Logs.TryDequeue(out _);
-        
-        // 3. Оновлюємо статус
         _state.Status = message;
     }
 
     private void LoadModel()
     {
-        if (File.Exists(_modelPath))
+        string metaPath = _modelPath + ".meta";
+        if (File.Exists(metaPath))
+        {
+            try {
+                var metaText = File.ReadAllText(metaPath);
+                MetaInfo = metaText; 
+                
+                var meta = metaText.Split('|');
+                if (meta.Length >= 1 && int.TryParse(meta[0], NumberStyles.Any, CultureInfo.InvariantCulture, out int count))
+                    _state.LastTrainedOnCount = count;
+                
+                if (meta.Length >= 2 && double.TryParse(meta[1], NumberStyles.Any, CultureInfo.InvariantCulture, out double acc))
+                    _state.LastAccuracy = acc;
+
+                if (meta.Length >= 3 && double.TryParse(meta[2], NumberStyles.Any, CultureInfo.InvariantCulture, out double auc))
+                    _state.LastAuc = auc;
+                    
+                if (meta.Length >= 4 && double.TryParse(meta[3], NumberStyles.Any, CultureInfo.InvariantCulture, out double f1))
+                    _state.LastF1 = f1;
+                
+                LogInfo($"Meta loaded: Acc={_state.LastAccuracy:P1}, AUC={_state.LastAuc:F3}");
+            } catch (Exception ex) {
+                MetaInfo = $"Error reading meta: {ex.Message}";
+                LogInfo("Meta file corruption detected.");
+            }
+        }
+        else 
+        {
+            MetaInfo = "Meta file not found";
+        }
+
+        if (File.Exists(_modelPath)) 
         {
             try 
             {
                 _trainedModel = _mlContext.Model.Load(_modelPath, out var schema);
                 _predEngine = _mlContext.Model.CreatePredictionEngine<ModelInput, ModelOutput>(_trainedModel);
-                
-                if (File.Exists(_modelPath + ".meta"))
-                {
-                    var meta = File.ReadAllText(_modelPath + ".meta").Split('|');
-                    if (meta.Length >= 1 && int.TryParse(meta[0], out int count)) _state.LastTrainedOnCount = count;
-                    if (meta.Length >= 2 && double.TryParse(meta[1], out double acc)) _state.LastAccuracy = acc;
-                }
-
-                if (File.Exists(_kbPath))
-                {
-                    var json = File.ReadAllText(_kbPath);
-                    _kb = JsonSerializer.Deserialize<KnowledgeBase>(json) ?? new KnowledgeBase();
-                }
-                LogInfo($"Model loaded. Trained on {_state.LastTrainedOnCount} matches.");
+                LogInfo("Model binary loaded successfully.");
             }
             catch (Exception ex) { 
-                _logger.LogError(ex, "Failed to load model"); 
+                _logger.LogError(ex, "Failed to load model binary"); 
+                if (_state.LastTrainedOnCount == 0) _state.Status = "Load Error";
             }
+        }
+
+        if (File.Exists(_kbPath))
+        {
+            try {
+                var json = File.ReadAllText(_kbPath);
+                _kb = JsonSerializer.Deserialize<KnowledgeBase>(json) ?? new KnowledgeBase();
+            } catch {}
         }
     }
 
@@ -316,7 +408,6 @@ public class ModelEngine
 
         var result = new PredictionResult { Probability = baseProb };
 
-        // XAI
         foreach (var heroId in req.Radiant)
         {
             if (heroId <= 0) continue;
@@ -352,50 +443,70 @@ public class ModelEngine
 
     private ModelInput CreateInput(PredictionRequest req)
     {
+        var (rStun, rCore) = _kb.GetComposition(req.Radiant);
+        var (dStun, dCore) = _kb.GetComposition(req.Dire);
+        var (rMelee, rStr, rAgi, rInt) = _kb.GetAdvStats(req.Radiant);
+        var (dMelee, dStr, dAgi, dInt) = _kb.GetAdvStats(req.Dire);
+
         var input = new ModelInput
         {
             Rank = req.Rank * 10, 
-            Heroes = new float[TOTAL_HERO_ID_SLOTS * 2],
-            Lanes = new float[10],
+            Heroes = new float[TOTAL_HERO_ID_SLOTS * 2], 
+            RadiantWinrateScore = _kb.CalculateTeamWinrateScore(req.Radiant),
+            DireWinrateScore = _kb.CalculateTeamWinrateScore(req.Dire),
             SynergyRadiant = _kb.CalculateTeamSynergy(req.Radiant),
             SynergyDire = _kb.CalculateTeamSynergy(req.Dire),
-            CounterScore = _kb.CalculateCounterScore(req.Radiant, req.Dire)
+            CounterScore = _kb.CalculateCounterScore(req.Radiant, req.Dire),
+            RadiantMetaScore = _kb.CalculateMetaScore(req.Radiant),
+            DireMetaScore = _kb.CalculateMetaScore(req.Dire),
+            RadiantStuns = rStun, DireStuns = dStun,
+            RadiantCores = rCore, DireCores = dCore,
+            RadiantMelee = rMelee, DireMelee = dMelee,
+            RadiantStr = rStr, RadiantAgi = rAgi, RadiantInt = rInt,
+            DireStr = dStr, DireAgi = dAgi, DireInt = dInt,
+            Weight = 1f 
         };
 
         foreach (var id in req.Radiant) if (id > 0 && id < TOTAL_HERO_ID_SLOTS) input.Heroes![id] = 1;
         foreach (var id in req.Dire)    if (id > 0 && id < TOTAL_HERO_ID_SLOTS) input.Heroes![TOTAL_HERO_ID_SLOTS + id] = 1;
 
-        for (int i = 0; i < req.RadiantLanes.Length && i < 5; i++) input.Lanes![i] = req.RadiantLanes[i];
-        for (int i = 0; i < req.DireLanes.Length && i < 5; i++) input.Lanes![5 + i] = req.DireLanes[i];
-
         return input;
     }
 
-    // Legacy
-    public ModelOutput Predict(PredictionRequest req) => _predEngine?.Predict(CreateInput(req)) ?? new ModelOutput();
-
-    public void Train()
+    public async void Train()
     {
         try
         {
             _state.IsTraining = true;
             _state.ProgressPercent = 0;
-            LogInfo("Starting training sequence...");
+            LogInfo("Starting training sequence (Deep Small Trees + Weighting)...");
             
-            LogInfo("Fetching matches from DB...");
+            await _kb.EnsureHeroesLoaded(_httpClientFactory);
+
+            LogInfo("Fetching matches (High Rank Only: Divine+)...");
             using var connection = new SqliteConnection("Data Source=dota_data.db");
-            var rawData = connection.Query<(int rank, string rTeam, string dTeam, bool win)>("SELECT avg_rank_tier, radiant_team, dire_team, radiant_win FROM Matches").ToList();
+            
+            var sql = @"
+                SELECT avg_rank_tier, radiant_team, dire_team, radiant_win FROM Matches 
+                WHERE avg_rank_tier >= 70 AND duration > 1200";
+                
+            var rawData = connection.Query<(int rank, string rTeam, string dTeam, bool win)>(sql).ToList();
             
             if (rawData.Count < 50)
             {
-                LogInfo($"Error: Not enough data ({rawData.Count} matches). Need 50+.");
+                LogInfo("Not enough data. Training aborted.");
                 _state.IsTraining = false;
                 return;
             }
 
-            // STEP 1: KB
+            double radiantWins = rawData.Count(x => x.win);
+            double direWins = rawData.Count(x => !x.win);
+            LogInfo($"Win rate: Radiant {radiantWins/(double)rawData.Count:P2}");
+            
+            float direWeightMultiplier = (float)(radiantWins / Math.Max(direWins, 1));
+            LogInfo($"Applying Weight Correction: Dire wins x{direWeightMultiplier:F2}");
+
             _state.ProgressPercent = 10;
-            LogInfo($"Analyzing Meta & Synergies on {rawData.Count} matches...");
             
             var parsedMatches = new List<(int[] r, int[] d, bool win)>();
             foreach(var m in rawData) {
@@ -406,27 +517,34 @@ public class ModelEngine
 
             _kb.Build(parsedMatches);
             File.WriteAllText(_kbPath, JsonSerializer.Serialize(_kb));
-            LogInfo("Knowledge Base built.");
 
-            // STEP 2: VECTORS
-            _state.ProgressPercent = 30;
-            LogInfo("Vectorizing features (One-Hot + Engineered)...");
+            _state.ProgressPercent = 20;
+            LogInfo("Vectorizing features with Weights...");
 
             var trainingData = new List<ModelInput>();
             int idx = 0;
             foreach (var match in rawData)
             {
                 var pm = parsedMatches[idx++];
-                
+                var (rStun, rCore) = _kb.GetComposition(pm.r);
+                var (dStun, dCore) = _kb.GetComposition(pm.d);
+                var (rMelee, rStr, rAgi, rInt) = _kb.GetAdvStats(pm.r);
+                var (dMelee, dStr, dAgi, dInt) = _kb.GetAdvStats(pm.d);
+
                 var input = new ModelInput 
                 { 
-                    Rank = match.rank, 
-                    Label = match.win, 
-                    Heroes = new float[TOTAL_HERO_ID_SLOTS * 2],
-                    Lanes = new float[10],
-                    SynergyRadiant = _kb.CalculateTeamSynergy(pm.r),
-                    SynergyDire = _kb.CalculateTeamSynergy(pm.d),
-                    CounterScore = _kb.CalculateCounterScore(pm.r, pm.d)
+                    Rank = match.rank, Label = match.win, 
+                    Heroes = new float[TOTAL_HERO_ID_SLOTS * 2], 
+                    RadiantWinrateScore = _kb.CalculateTeamWinrateScore(pm.r),
+                    DireWinrateScore = _kb.CalculateTeamWinrateScore(pm.d),
+                    SynergyRadiant = _kb.CalculateTeamSynergy(pm.r), SynergyDire = _kb.CalculateTeamSynergy(pm.d),
+                    CounterScore = _kb.CalculateCounterScore(pm.r, pm.d),
+                    RadiantMetaScore = _kb.CalculateMetaScore(pm.r), DireMetaScore = _kb.CalculateMetaScore(pm.d),
+                    RadiantStuns = rStun, DireStuns = dStun, RadiantCores = rCore, DireCores = dCore,
+                    RadiantMelee = rMelee, DireMelee = dMelee, RadiantStr = rStr, RadiantAgi = rAgi, RadiantInt = rInt, DireStr = dStr, DireAgi = dAgi, DireInt = dInt,
+                    
+                    // [BALANCED] Зважування ON
+                    Weight = match.win ? 1.0f : direWeightMultiplier
                 };
 
                 foreach (var id in pm.r) if (id > 0 && id < TOTAL_HERO_ID_SLOTS) input.Heroes![id] = 1;
@@ -436,54 +554,64 @@ public class ModelEngine
             }
 
             var dataView = _mlContext.Data.LoadFromEnumerable(trainingData);
-            var split = _mlContext.Data.TrainTestSplit(dataView, testFraction: 0.15); 
+            var split = _mlContext.Data.TrainTestSplit(dataView, testFraction: 0.15);
 
-            _state.ProgressPercent = 50;
-            LogInfo("Training LightGBM (Gradient Boosting)...");
-
-            // OPTIONS
             var options = new LightGbmBinaryTrainer.Options
             {
-                LabelColumnName = "Label",
+                LabelColumnName = "Label", 
                 FeatureColumnName = "Features",
-                NumberOfLeaves = 50,
-                MinimumExampleCountPerLeaf = 20,
-                LearningRate = 0.02,
-                NumberOfIterations = 1500
-                // Прибрали проблемні поля Booster для сумісності з консольним запуском
+                ExampleWeightColumnName = "Weight",
+                
+                // [DEEP SMALL TREES] Стратегія "багато маленьких кроків"
+                NumberOfLeaves = 40, // Маленькі дерева = менше перенавчання
+                MinimumExampleCountPerLeaf = 50, // Тільки надійні дані
+                LearningRate = 0.01, // Дуже повільно
+                NumberOfIterations = 8000, // Дуже довго (компенсація малого кроку)
+                Booster = new GradientBooster.Options { L2Regularization = 0.5f, FeatureFraction = 0.85 }
             };
 
+            // [NEW] Повернули калібратор для кращого AUC
             var pipeline = _mlContext.Transforms.Concatenate("Features", 
-                    "Rank", "Heroes", "Lanes", 
-                    "SynergyRadiant", "SynergyDire", "CounterScore")
-                .Append(_mlContext.BinaryClassification.Trainers.LightGbm(options));
+                    "Rank", "Heroes", "RadiantWinrateScore", "DireWinrateScore", "SynergyRadiant", "SynergyDire", "CounterScore",
+                    "RadiantMetaScore", "DireMetaScore", "RadiantStuns", "DireStuns", "RadiantCores", "DireCores",
+                    "RadiantMelee", "DireMelee", "RadiantStr", "RadiantAgi", "RadiantInt", "DireStr", "DireAgi", "DireInt")
+                .Append(_mlContext.BinaryClassification.Trainers.LightGbm(options))
+                .Append(_mlContext.BinaryClassification.Calibrators.Platt()); 
+
+            _state.ProgressPercent = 50;
+            LogInfo("Training Deep Small Trees Model...");
 
             _trainedModel = pipeline.Fit(split.TrainSet);
-            
+
             _state.ProgressPercent = 80;
-            LogInfo("Evaluating model accuracy...");
+            LogInfo("Evaluating on 15% test set...");
 
             var predictions = _trainedModel.Transform(split.TestSet);
             var metrics = _mlContext.BinaryClassification.Evaluate(predictions, "Label");
 
             _state.ProgressPercent = 90;
-            LogInfo($"Validation Accuracy: {metrics.Accuracy:P2}. Saving...");
+            LogInfo($"Metrics (Real Test): Acc={metrics.Accuracy:P2}, AUC={metrics.AreaUnderRocCurve:F3}");
+            LogInfo("Saving...");
 
             _mlContext.Model.Save(_trainedModel, dataView.Schema, _modelPath);
-            File.WriteAllText(_modelPath + ".meta", $"{rawData.Count}|{metrics.Accuracy}");
+            File.WriteAllText(_modelPath + ".meta", 
+                $"{rawData.Count}|{metrics.Accuracy.ToString(CultureInfo.InvariantCulture)}|{metrics.AreaUnderRocCurve.ToString(CultureInfo.InvariantCulture)}|{metrics.F1Score.ToString(CultureInfo.InvariantCulture)}");
             
             _predEngine = _mlContext.Model.CreatePredictionEngine<ModelInput, ModelOutput>(_trainedModel);
 
             _state.LastTrainedOnCount = rawData.Count;
             _state.LastAccuracy = metrics.Accuracy;
-            LogInfo("Training Complete. Model Ready.");
-            _state.Status = $"Ready (Acc: {metrics.Accuracy:P1})";
+            _state.LastAuc = metrics.AreaUnderRocCurve;
+            _state.LastF1 = metrics.F1Score;
+
+            LogInfo("Training Complete.");
+            _state.Status = $"Ready (AUC: {metrics.AreaUnderRocCurve:F3})";
             _state.ProgressPercent = 100;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Training crash");
-            LogInfo("CRITICAL ERROR during training. Check console.");
+            LogInfo("CRITICAL ERROR. Check console.");
             _state.Status = "Training Failed";
         }
         finally

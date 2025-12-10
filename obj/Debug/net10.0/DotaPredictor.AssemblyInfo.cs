@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("DotaPredictor")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+3d4fb67b2a72192c5dc12683763f60012fad4b31")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+35f4f0585d66c0736ffe6ecf69897c1c063b161b")]
 [assembly: System.Reflection.AssemblyProductAttribute("DotaPredictor")]
 [assembly: System.Reflection.AssemblyTitleAttribute("DotaPredictor")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

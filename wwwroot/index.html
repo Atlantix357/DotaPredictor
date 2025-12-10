@@ -18,7 +18,7 @@
             theme: {
                 extend: {
                     fontFamily: { sans: ['Inter', 'sans-serif'], display: ['Rajdhani', 'sans-serif'] },
-                    colors: { dark: "#0b0e14", panel: "#13161c", radiant: "#10b981", dire: "#ef4444" }
+                    colors: { dark: "#0b0e14", panel: "#13161c", radiant: "#10b981", dire: "#ef4444", str: "#ef4444", agi: "#22c55e", int: "#3b82f6", uni: "#a855f7" }
                 }
             }
         }
@@ -35,7 +35,6 @@
             border: 1px solid rgba(255, 255, 255, 0.05);
         }
 
-        /* Custom Scrollbar */
         ::-webkit-scrollbar {
             width: 6px;
         }
@@ -53,81 +52,39 @@
             background: #475569;
         }
 
-        /* Animations */
         .slot-active {
             box-shadow: 0 0 0 1px currentColor, 0 0 15px currentColor;
             border-color: currentColor;
         }
 
-        @keyframes pulse-glow {
-
-            0%,
-            100% {
-                opacity: 1;
-            }
-
-            50% {
-                opacity: 0.5;
-            }
+        .picker-grid {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            align-content: start;
         }
 
-        .animate-pulse-slow {
-            animation: pulse-glow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-        }
-
-        /* Lane Selector Styling */
-        .lane-select {
-            appearance: none;
-            background: rgba(0, 0, 0, 0.4);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            color: #aaa;
-            font-size: 0.65rem;
-            padding: 2px 6px;
-            border-radius: 4px;
-            outline: none;
-            cursor: pointer;
-            text-transform: uppercase;
-            font-weight: bold;
-            transition: all 0.2s;
-        }
-
-        .lane-select:hover {
+        .filter-btn.active {
+            background-color: rgba(255, 255, 255, 0.1);
             border-color: rgba(255, 255, 255, 0.3);
             color: white;
         }
 
-        .lane-select option {
-            background: #111;
-            color: white;
-        }
-
-        /* Hero Grid Gap Fix */
-        .picker-grid {
+        .stat-bar-bg {
+            background: #1e293b;
+            height: 4px;
+            border-radius: 2px;
+            overflow: hidden;
             flex: 1;
-            overflow-y: auto;
-            padding: 15px;
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 16px;
-            align-content: start;
         }
 
-        /* Log Styling */
-        .log-entry {
-            font-family: monospace;
-            font-size: 0.7rem;
-            margin-bottom: 2px;
-            color: #888;
-        }
-
-        .log-entry span {
-            color: #fff;
-            font-weight: bold;
-        }
-
-        .log-time {
-            color: #555;
-            margin-right: 5px;
+        .stat-bar-fill {
+            height: 100%;
+            border-radius: 2px;
+            transition: width 0.5s ease;
         }
     </style>
 </head>
@@ -135,7 +92,7 @@
 <body class="h-screen w-screen flex overflow-hidden text-sm bg-dark">
 
     <!-- LEFT PANEL: MAIN APP -->
-    <div class="flex-1 flex flex-col p-4 gap-4 min-w-[700px] overflow-hidden relative">
+    <div class="flex-1 flex flex-col p-4 gap-4 min-w-[600px] overflow-hidden relative">
 
         <!-- HEADER -->
         <header class="flex justify-between items-center glass p-4 rounded-xl shrink-0">
@@ -148,7 +105,7 @@
                     <h1 class="font-display text-2xl font-bold tracking-widest text-white leading-none">
                         DOTA<span class="text-indigo-400">PREDICTOR</span>
                     </h1>
-                    <div class="text-[10px] text-slate-400 font-mono tracking-widest uppercase">Deep Learning Model
+                    <div class="text-[10px] text-slate-400 font-mono tracking-widest uppercase">Deep Learning Model v3
                     </div>
                 </div>
             </div>
@@ -157,14 +114,10 @@
                 <div class="flex flex-col items-end">
                     <label class="text-[10px] uppercase font-bold text-slate-500 tracking-wider mb-1">Rank Tier</label>
                     <select id="rankSelect" onchange="onRankChange(this)"
-                        class="bg-slate-800 border border-slate-700 text-white text-xs rounded px-3 py-1.5 outline-none focus:border-indigo-500 transition-colors cursor-pointer">
-                        <option value="1">Herald</option>
-                        <option value="2">Guardian</option>
-                        <option value="3">Crusader</option>
-                        <option value="4">Archon</option>
-                        <option value="5" selected>Legend</option>
+                        class="bg-slate-800 border border-slate-700 text-white text-xs rounded px-3 py-1.5 outline-none focus:border-indigo-500 transition-colors cursor-pointer min-w-[120px]">
+                        <option value="5">Legend</option>
                         <option value="6">Ancient</option>
-                        <option value="7">Divine</option>
+                        <option value="7" selected>Divine</option>
                         <option value="8">Immortal</option>
                     </select>
                 </div>
@@ -176,136 +129,201 @@
             </div>
         </header>
 
-        <!-- PREDICTION BAR -->
-        <div class="glass p-1 rounded-full flex h-12 relative overflow-hidden shadow-2xl shrink-0">
-            <div id="radiantBar"
-                class="h-full bg-gradient-to-r from-emerald-900 to-emerald-500 flex items-center justify-center font-display font-bold text-xl text-white transition-all duration-700 w-1/2">
-                50%
-            </div>
-            <div id="direBar"
-                class="h-full bg-gradient-to-l from-red-900 to-red-500 flex items-center justify-center font-display font-bold text-xl text-white transition-all duration-700 w-1/2">
-                50%
-            </div>
-            <div
-                class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-slate-900 rounded-full border-2 border-slate-700 flex items-center justify-center z-10 font-black italic text-slate-500 text-xs">
-                VS</div>
-        </div>
+        <!-- MAIN DASHBOARD CONTENT -->
+        <div class="flex flex-col gap-4 flex-1 overflow-hidden">
 
-        <!-- Analysis Text -->
-        <div class="glass p-3 rounded-lg border border-indigo-500/20 text-center relative overflow-hidden shrink-0">
-            <div class="absolute top-0 left-0 w-1 h-full bg-indigo-500"></div>
-            <div class="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-1">AI Analysis</div>
-            <div id="predictionReason" class="text-sm text-slate-200 font-medium">
-                Draft full teams to generate prediction insight...
-            </div>
-        </div>
-
-        <!-- DRAFT BOARD (Scrollable Area) -->
-        <div class="flex gap-4 flex-1 overflow-y-auto pr-1">
-            <!-- RADIANT -->
-            <div class="flex-1 flex flex-col gap-2">
-                <div class="flex justify-between items-center px-2 pb-2 border-b border-emerald-500/20">
-                    <h2 class="font-display text-lg font-bold text-emerald-400 flex items-center gap-2">
-                        <i class="fa-brands fa-envira"></i> RADIANT
-                    </h2>
-                </div>
-                <div id="radiantSlots" class="flex flex-col gap-2"></div>
-            </div>
-
-            <!-- DIRE -->
-            <div class="flex-1 flex flex-col gap-2">
-                <div class="flex justify-between items-center px-2 pb-2 border-b border-red-500/20">
-                    <h2 class="font-display text-lg font-bold text-red-400 flex items-center gap-2">
-                        <i class="fa-solid fa-fire"></i> DIRE
-                    </h2>
-                </div>
-                <div id="direSlots" class="flex flex-col gap-2"></div>
-            </div>
-        </div>
-
-        <!-- FOOTER CONTROLS -->
-        <div class="grid grid-cols-3 gap-4 shrink-0 h-32">
-
-            <!-- 1. DATA WIDGET -->
-            <div class="glass p-4 rounded-xl flex flex-col justify-between border-l-2 border-slate-600">
-                <div class="flex justify-between items-start">
-                    <div>
-                        <div class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Database Size</div>
-                        <div class="font-display text-2xl font-bold text-white" id="matchCount">0</div>
+            <!-- TOP ROW: PREDICTION -->
+            <div class="flex gap-4 shrink-0 h-40">
+                <!-- PREDICTION CARD -->
+                <div class="glass flex-1 p-4 rounded-xl flex flex-col justify-center items-center relative shadow-xl">
+                    <div class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Win Probability
                     </div>
-                    <div id="statusIndicator"
-                        class="text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-1.5">
-                        <div class="w-1.5 h-1.5 rounded-full bg-slate-500"></div> Idle
-                    </div>
-                </div>
-                <div class="flex gap-2">
-                    <button onclick="toggleFetcher(true)"
-                        class="flex-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 py-1.5 rounded text-xs font-bold transition">
-                        RESUME
-                    </button>
-                    <button onclick="toggleFetcher(false)"
-                        class="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 py-1.5 rounded text-xs font-bold transition">
-                        PAUSE
-                    </button>
-                </div>
-            </div>
 
-            <!-- 2. AI WIDGET -->
-            <div class="glass p-4 rounded-xl flex flex-col justify-between border-l-2 border-indigo-500">
-                <div class="flex justify-between items-start">
-                    <div>
-                        <div class="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">Model Status</div>
-                        <div class="font-display text-sm font-bold text-white mt-1" id="modelTrainedCount">Not Trained
+                    <!-- DUAL BAR SYSTEM -->
+                    <div
+                        class="w-full flex h-10 bg-slate-900 rounded-lg overflow-hidden relative shadow-inner mb-2 border border-slate-800">
+                        <div id="radiantBar"
+                            class="h-full bg-gradient-to-r from-emerald-900 to-emerald-500 flex items-center justify-start pl-4 font-display font-bold text-xl text-white transition-all duration-700 whitespace-nowrap"
+                            style="width: 50%">50%</div>
+                        <div id="direBar"
+                            class="h-full bg-gradient-to-l from-red-900 to-red-500 flex items-center justify-end pr-4 font-display font-bold text-xl text-white transition-all duration-700 whitespace-nowrap"
+                            style="width: 50%">50%</div>
+                        <div
+                            class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-slate-800 rounded-full border-2 border-slate-700 flex items-center justify-center z-10 font-black italic text-slate-500 text-xs shadow-lg">
+                            VS</div>
+                    </div>
+
+                    <div id="predictionReason" class="text-xs text-slate-300 font-medium text-center opacity-80 h-4">
+                        Draft full teams to generate insight...</div>
+                </div>
+
+                <!-- STATS BOARD -->
+                <div class="glass w-72 p-3 rounded-xl flex flex-col justify-between border-l-2 border-indigo-500/30">
+                    <div class="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-1 text-center">
+                        Composition</div>
+
+                    <div class="flex items-center gap-2 text-xs">
+                        <div class="w-16 text-slate-400 flex items-center gap-1"><i
+                                class="fa-solid fa-bolt text-[10px]"></i> Stuns</div>
+                        <div class="flex-1 flex gap-1 h-1.5">
+                            <div id="statStunR" class="bg-emerald-500/50 h-full rounded-l transition-all"
+                                style="width: 0%"></div>
+                            <div class="bg-slate-800 flex-1 h-full"></div>
+                            <div id="statStunD" class="bg-red-500/50 h-full rounded-r transition-all" style="width: 0%">
+                            </div>
                         </div>
-                        <div class="text-[10px] text-slate-400 mt-0.5" id="modelAccuracy"></div>
                     </div>
-                    <i class="fa-solid fa-microchip text-indigo-500 text-lg"></i>
+                    <div class="flex items-center gap-2 text-xs">
+                        <div class="w-16 text-slate-400 flex items-center gap-1"><i
+                                class="fa-solid fa-gavel text-[10px]"></i> Melee</div>
+                        <div class="flex-1 flex gap-1 h-1.5">
+                            <div id="statMeleeR" class="bg-emerald-500/50 h-full rounded-l transition-all"
+                                style="width: 0%"></div>
+                            <div class="bg-slate-800 flex-1 h-full"></div>
+                            <div id="statMeleeD" class="bg-red-500/50 h-full rounded-r transition-all"
+                                style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 text-xs">
+                        <div class="w-16 text-slate-400 flex items-center gap-1"><i
+                                class="fa-solid fa-sack-dollar text-[10px]"></i> Cores</div>
+                        <div class="flex-1 flex gap-1 h-1.5">
+                            <div id="statCoreR" class="bg-emerald-500/50 h-full rounded-l transition-all"
+                                style="width: 0%"></div>
+                            <div class="bg-slate-800 flex-1 h-full"></div>
+                            <div id="statCoreD" class="bg-red-500/50 h-full rounded-r transition-all" style="width: 0%">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex justify-between mt-1 px-2">
+                        <div class="flex gap-0.5 h-1 w-20 rounded overflow-hidden opacity-80" id="attrBarRadiant"></div>
+                        <div class="flex gap-0.5 h-1 w-20 rounded overflow-hidden opacity-80 flex-row-reverse"
+                            id="attrBarDire"></div>
+                    </div>
                 </div>
-
-                <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden mb-2">
-                    <div id="trainProgress" class="bg-indigo-500 h-full w-0 transition-all duration-300"></div>
-                </div>
-
-                <button onclick="startTraining()" id="btnTrain"
-                    class="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-1.5 rounded font-bold text-xs shadow-lg shadow-indigo-500/20 transition-all">
-                    RETRAIN MODEL
-                </button>
             </div>
 
-            <!-- 3. LIVE LOG WIDGET (NEW) -->
-            <div class="glass p-3 rounded-xl flex flex-col border-l-2 border-emerald-500/50 relative overflow-hidden">
-                <div
-                    class="text-[10px] font-bold text-emerald-500/70 uppercase tracking-wider mb-2 flex items-center gap-2">
-                    <i class="fa-solid fa-terminal"></i> System Logs
+            <!-- DRAFT BOARD -->
+            <div class="flex gap-4 flex-1 overflow-y-auto pr-1 min-h-0">
+                <!-- RADIANT -->
+                <div class="flex-1 flex flex-col gap-2">
+                    <div class="flex justify-between items-center px-2 pb-2 border-b border-emerald-500/20">
+                        <h2 class="font-display text-lg font-bold text-emerald-400 flex items-center gap-2">
+                            <i class="fa-brands fa-envira"></i> RADIANT
+                        </h2>
+                    </div>
+                    <div id="radiantSlots" class="flex flex-col gap-2"></div>
                 </div>
-                <div id="liveLogs" class="flex-1 overflow-y-auto pr-1 flex flex-col-reverse">
-                    <div class="log-entry"><span class="log-time">System:</span><span>Ready.</span></div>
+
+                <!-- FACTORS LIST -->
+                <div class="w-40 flex flex-col gap-2 pt-8 overflow-y-auto">
+                    <div class="text-[10px] text-center text-slate-500 font-bold uppercase mb-2">Impact Factors</div>
+                    <div id="factorsList" class="flex flex-col gap-2"></div>
+                </div>
+
+                <!-- DIRE -->
+                <div class="flex-1 flex flex-col gap-2">
+                    <div class="flex justify-between items-center px-2 pb-2 border-b border-red-500/20">
+                        <h2 class="font-display text-lg font-bold text-red-400 flex items-center gap-2 justify-end">
+                            DIRE <i class="fa-solid fa-fire"></i>
+                        </h2>
+                    </div>
+                    <div id="direSlots" class="flex flex-col gap-2"></div>
                 </div>
             </div>
-
         </div>
     </div>
 
-    <!-- RIGHT PANEL: HERO PICKER -->
-    <div class="w-[380px] bg-[#111] border-l border-white/5 flex flex-col z-10 shadow-2xl shrink-0">
-        <!-- Search -->
-        <div class="p-4 border-b border-white/5 bg-[#161920]">
-            <div class="relative">
-                <i
-                    class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
-                <input type="text" id="heroSearch" onkeyup="filterHeroes()" placeholder="Find Hero..."
-                    class="w-full bg-black/40 text-white pl-9 pr-3 py-2.5 rounded-lg border border-white/10 focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 outline-none transition-all placeholder-slate-600 font-sans text-xs">
+    <!-- RIGHT PANEL: CONTROLS & HERO PICKER -->
+    <div class="w-[340px] bg-[#111] border-l border-white/5 flex flex-col z-10 shadow-2xl shrink-0">
+
+        <!-- SYSTEM CONTROL PANEL (MOVED HERE FROM FOOTER) -->
+        <div class="p-4 bg-slate-900 border-b border-white/10 flex flex-col gap-3">
+            <!-- Model Status -->
+            <div class="flex flex-col gap-2">
+                <div class="flex justify-between items-end">
+                    <div>
+                        <div class="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Model Accuracy</div>
+                        <div class="font-display text-2xl font-bold text-emerald-400 leading-none" id="modelAccuracy">
+                            --%</div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-[10px] text-slate-500 font-bold uppercase tracking-wider">AUC Score</div>
+                        <div class="font-display text-xl font-bold text-indigo-400 leading-none" id="modelAuc">--</div>
+                    </div>
+                </div>
+
+                <div class="flex justify-between items-center bg-black/20 rounded px-2 py-1">
+                    <div class="text-[9px] text-slate-600 uppercase font-bold">Training Set</div>
+                    <div class="font-mono text-[10px] text-slate-300" id="modelTrainedCount">0</div>
+                </div>
+            </div>
+
+            <!-- Progress Bar -->
+            <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden hidden" id="trainProgressBox">
+                <div id="trainProgress" class="bg-indigo-500 h-full w-0 transition-all duration-300"></div>
+            </div>
+
+            <!-- Actions Row -->
+            <div class="grid grid-cols-2 gap-2">
+                <button onclick="startTraining()" id="btnTrain"
+                    class="bg-indigo-600 hover:bg-indigo-500 text-white py-2 rounded text-xs font-bold transition">
+                    RETRAIN
+                </button>
+                <button onclick="toggleFetcher()" id="btnFetcher"
+                    class="bg-slate-800 hover:bg-slate-700 text-slate-300 py-2 rounded text-xs font-bold transition flex items-center justify-center gap-2">
+                    <div id="fetcherStatusDot" class="w-1.5 h-1.5 rounded-full bg-slate-500"></div>
+                    <span id="fetcherText">FETCHER: OFF</span>
+                </button>
+            </div>
+
+            <!-- Mini Data Stat -->
+            <div class="text-[9px] text-center text-slate-600">
+                Data: <span id="divineCount" class="text-slate-400">0</span> Divine+ matches
             </div>
         </div>
 
-        <!-- Hero Grid -->
-        <div id="heroPickerGrid" class="picker-grid">
-            <!-- JS injects heroes here -->
+        <!-- SEARCH & FILTERS -->
+        <div class="p-3 bg-[#161920] flex flex-col gap-3 border-b border-white/5">
+            <div class="relative">
+                <i
+                    class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
+                <input type="text" id="heroSearch" onkeyup="filterHeroes()" placeholder="Search Hero..."
+                    class="w-full bg-black/40 text-white pl-9 pr-3 py-2 rounded-lg border border-white/10 focus:border-indigo-500/50 outline-none transition-all placeholder-slate-600 font-sans text-xs">
+            </div>
+            <div class="flex gap-1 justify-between">
+                <button onclick="setFilter('str')" id="filter-str"
+                    class="filter-btn flex-1 py-1.5 rounded bg-slate-800 border border-slate-700 hover:border-red-500 text-slate-400 hover:text-white transition flex justify-center"
+                    title="Strength"><img
+                        src="https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/icons/hero_strength.png"
+                        class="w-4 h-4 grayscale opacity-70"></button>
+                <button onclick="setFilter('agi')" id="filter-agi"
+                    class="filter-btn flex-1 py-1.5 rounded bg-slate-800 border border-slate-700 hover:border-green-500 text-slate-400 hover:text-white transition flex justify-center"
+                    title="Agility"><img
+                        src="https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/icons/hero_agility.png"
+                        class="w-4 h-4 grayscale opacity-70"></button>
+                <button onclick="setFilter('int')" id="filter-int"
+                    class="filter-btn flex-1 py-1.5 rounded bg-slate-800 border border-slate-700 hover:border-blue-500 text-slate-400 hover:text-white transition flex justify-center"
+                    title="Intelligence"><img
+                        src="https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/icons/hero_intelligence.png"
+                        class="w-4 h-4 grayscale opacity-70"></button>
+                <button onclick="setFilter('all')" id="filter-all"
+                    class="filter-btn flex-1 py-1.5 rounded bg-slate-800 border border-slate-700 hover:border-purple-500 text-slate-400 hover:text-white transition flex justify-center"
+                    title="Universal"><img
+                        src="https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/icons/hero_universal.png"
+                        class="w-4 h-4 grayscale opacity-70"></button>
+                <button onclick="setFilter(null)" id="filter-clear"
+                    class="filter-btn w-8 py-1.5 rounded bg-slate-800 border border-slate-700 text-slate-400 hover:text-white transition flex justify-center"><i
+                        class="fa-solid fa-xmark"></i></button>
+            </div>
         </div>
 
-        <!-- Footer -->
+        <!-- HERO GRID -->
+        <div id="heroPickerGrid" class="picker-grid"></div>
+
+        <!-- FOOTER INFO -->
         <div class="p-2 border-t border-white/5 text-center text-[10px] text-slate-600 bg-[#0f1115]">
-            Data Source: OpenDota | Assets: Valve
+            OpenDota API &bull; Valve Corp &bull; v3.1
         </div>
     </div>
 
@@ -315,297 +333,240 @@
         const HERO_DATA_URL = "https://cdn.jsdelivr.net/gh/odota/dotaconstants@master/build/heroes.json";
 
         let allHeroes = [];
-        // Data Structure: { hero: Object, lane: Int } or null
-        let draft = {
-            radiant: [null, null, null, null, null],
-            dire: [null, null, null, null, null]
-        };
+        let draft = { radiant: [null, null, null, null, null], dire: [null, null, null, null, null] };
         let activeSlot = { team: 'radiant', index: 0 };
+        let activeFilter = null;
+        let isFetcherRunning = false;
 
-        // LOGGING FUNCTION
-        function uiLog(msg) {
-            const container = document.getElementById('liveLogs');
-            const time = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-            const entry = document.createElement('div');
-            entry.className = 'log-entry';
-            entry.innerHTML = `<span class="log-time">[${time}]</span> ${msg}`;
-            container.prepend(entry); // Newest top
-            // Keep only last 50 logs
-            if (container.children.length > 50) container.lastChild.remove();
-        }
+        const ATTR_ICONS = { 'str': 'hero_strength.png', 'agi': 'hero_agility.png', 'int': 'hero_intelligence.png', 'all': 'hero_universal.png' };
 
         async function init() {
+            // Start polling immediately
+            setInterval(refreshStatus, 2000);
+            refreshStatus();
+
             try {
                 const res = await fetch(HERO_DATA_URL);
                 if (!res.ok) throw new Error("Network Error");
                 const data = await res.json();
-                const rawHeroes = Object.values(data);
-
-                allHeroes = rawHeroes.map(h => ({
+                allHeroes = Object.values(data).map(h => ({
                     id: h.id,
                     name: h.localized_name,
-                    img: `${CDN_BASE}/${h.name.replace('npc_dota_hero_', '')}.png`
+                    img: `${CDN_BASE}/${h.name.replace('npc_dota_hero_', '')}.png`,
+                    attr: h.primary_attr,
+                    roles: h.roles,
+                    attack: h.attack_type
                 })).sort((a, b) => a.name.localeCompare(b.name));
 
                 renderBoard();
                 renderPicker();
-                setInterval(refreshStatus, 2000);
-                uiLog("System initialized. Hero database loaded.");
-
-            } catch (e) {
-                console.error(e);
-                uiLog(`<span style="color:#ef4444">ERROR: Failed to load heroes</span>`);
-            }
-        }
-
-        function renderBoard() {
-            renderTeam('radiant');
-            renderTeam('dire');
-        }
-
-        function renderTeam(team) {
-            const container = document.getElementById(`${team}Slots`);
-            container.innerHTML = '';
-
-            draft[team].forEach((slotData, idx) => {
-                const isActive = activeSlot.team === team && activeSlot.index === idx;
-                const laneVal = slotData ? slotData.lane : 0;
-
-                const el = document.createElement('div');
-                el.className = `
-                    h-16 rounded-md border flex items-center px-2 cursor-pointer transition-all relative overflow-hidden group select-none
-                    ${isActive
-                        ? `slot-active border-${team === 'radiant' ? 'emerald' : 'red'}-500/50 bg-white/5`
-                        : 'border-white/5 bg-white/5 hover:bg-white/10 hover:border-white/10'}
-                `;
-                el.onclick = (e) => {
-                    if (e.target.tagName !== 'SELECT' && !e.target.closest('.remove-btn')) {
-                        activeSlot = { team, index: idx }; renderBoard();
-                    }
-                };
-
-                if (slotData && slotData.hero) {
-                    const h = slotData.hero;
-                    el.innerHTML = `
-                        <img src="${h.img}" class="w-16 h-10 object-cover rounded shadow bg-black mr-3">
-                        <div class="flex-1 min-w-0">
-                            <div class="font-bold text-xs text-slate-200 truncate">${h.name}</div>
-                            <select class="lane-select mt-1" onchange="updateLane('${team}', ${idx}, this.value)">
-                                <option value="0" ${laneVal == 0 ? 'selected' : ''}>ANY</option>
-                                <option value="1" ${laneVal == 1 ? 'selected' : ''}>SAFE</option>
-                                <option value="2" ${laneVal == 2 ? 'selected' : ''}>MID</option>
-                                <option value="3" ${laneVal == 3 ? 'selected' : ''}>OFF</option>
-                                <option value="4" ${laneVal == 4 ? 'selected' : ''}>ROAM</option>
-                            </select>
-                        </div>
-                        <button onclick="removeHero('${team}', ${idx}); event.stopPropagation()" 
-                            class="remove-btn absolute right-2 top-2 text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition">
-                            <i class="fa-solid fa-xmark"></i>
-                        </button>
-                    `;
-                } else {
-                    el.innerHTML = `
-                        <div class="w-16 h-10 rounded bg-black/20 flex items-center justify-center mr-3 text-slate-600 border border-white/5">
-                            <i class="fa-solid fa-plus text-[10px]"></i>
-                        </div>
-                        <span class="text-[10px] text-slate-600 uppercase font-bold tracking-wider">Empty</span>
-                    `;
-                }
-                container.appendChild(el);
-            });
-        }
-
-        function renderPicker() {
-            const grid = document.getElementById('heroPickerGrid');
-            const search = document.getElementById('heroSearch').value.toLowerCase();
-            grid.innerHTML = '';
-
-            const pickedIds = [...draft.radiant, ...draft.dire]
-                .filter(s => s && s.hero).map(s => s.hero.id);
-
-            allHeroes.forEach(hero => {
-                if (!hero.name.toLowerCase().includes(search)) return;
-
-                const isPicked = pickedIds.includes(hero.id);
-
-                const card = document.createElement('div');
-                card.className = `
-                    relative aspect-video bg-slate-800 rounded overflow-hidden cursor-pointer border border-transparent transition-transform hover:scale-105 hover:border-indigo-400 hover:z-10
-                    ${isPicked ? 'opacity-20 grayscale pointer-events-none' : ''}
-                `;
-                card.onclick = () => pickHero(hero);
-
-                card.innerHTML = `
-                    <img src="${hero.img}" loading="lazy" class="w-full h-full object-cover">
-                    <div class="absolute bottom-0 w-full bg-black/80 text-[9px] text-center text-slate-300 py-0.5 truncate px-1 pointer-events-none">
-                        ${hero.name}
-                    </div>
-                `;
-                grid.appendChild(card);
-            });
-        }
-
-        function pickHero(hero) {
-            draft[activeSlot.team][activeSlot.index] = { hero: hero, lane: 0 };
-            uiLog(`Picked <span>${hero.name}</span> for ${activeSlot.team}`);
-
-            // Auto-advance
-            let nextIdx = -1;
-            for (let i = activeSlot.index + 1; i < 5; i++) {
-                if (draft[activeSlot.team][i] === null) { nextIdx = i; break; }
-            }
-            if (nextIdx !== -1) {
-                activeSlot.index = nextIdx;
-            } else {
-                const otherTeam = activeSlot.team === 'radiant' ? 'dire' : 'radiant';
-                for (let i = 0; i < 5; i++) {
-                    if (draft[otherTeam][i] === null) {
-                        activeSlot = { team: otherTeam, index: i };
-                        break;
-                    }
-                }
-            }
-
-            renderBoard();
-            renderPicker();
-            predict();
-        }
-
-        function updateLane(team, idx, val) {
-            if (draft[team][idx]) {
-                const lanes = ["ANY", "SAFE", "MID", "OFF", "ROAM"];
-                draft[team][idx].lane = parseInt(val);
-                uiLog(`Set lane <span>${lanes[val]}</span> for ${draft[team][idx].hero.name}`);
-                predict();
-            }
-        }
-
-        function onRankChange(el) {
-            uiLog(`Rank updated to <span>${el.options[el.selectedIndex].text}</span>`);
-            predict();
-        }
-
-        function removeHero(team, idx) {
-            const heroName = draft[team][idx].hero.name;
-            draft[team][idx] = null;
-            activeSlot = { team, index: idx };
-            uiLog(`Removed <span>${heroName}</span> from ${team}`);
-            renderBoard();
-            renderPicker();
-        }
-
-        function filterHeroes() { renderPicker(); }
-
-        function resetDraft() {
-            draft.radiant.fill(null);
-            draft.dire.fill(null);
-            activeSlot = { team: 'radiant', index: 0 };
-            uiLog("Draft reset");
-            renderBoard();
-            renderPicker();
-            updateBar(0.5);
-            document.getElementById('predictionReason').innerText = "Select heroes...";
-        }
-
-        // --- API ---
-        async function predict() {
-            const rData = draft.radiant.filter(s => s && s.hero);
-            const dData = draft.dire.filter(s => s && s.hero);
-
-            if (rData.length === 0 && dData.length === 0) return;
-
-            const payload = {
-                rank: parseInt(document.getElementById('rankSelect').value),
-                radiant: rData.map(s => s.hero.id),
-                dire: dData.map(s => s.hero.id),
-                radiantLanes: rData.map(s => s.lane),
-                direLanes: dData.map(s => s.lane)
-            };
-
-            try {
-                uiLog("Calculating prediction...");
-                const res = await fetch('/api/predict', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                const data = await res.json();
-                updateBar(data.radiantWinProbability);
-                document.getElementById('predictionReason').innerText = data.reason;
-                const prob = (data.radiantWinProbability * 100).toFixed(1);
-                uiLog(`Prediction: Radiant <span>${prob}%</span>`);
             } catch (e) { console.error(e); }
         }
 
-        function updateBar(prob) {
-            const pct = Math.round(prob * 100);
-            document.getElementById('radiantBar').style.width = `${pct}%`;
-            document.getElementById('radiantBar').innerText = `${pct}%`;
-            document.getElementById('direBar').style.width = `${100 - pct}%`;
-            document.getElementById('direBar').innerText = `${100 - pct}%`;
+        // Helper to handle case-sensitivity
+        function getProp(obj, keyName) {
+            if (!obj) return undefined;
+            const key = Object.keys(obj).find(k => k.toLowerCase() === keyName.toLowerCase());
+            return key ? obj[key] : undefined;
         }
 
         async function refreshStatus() {
             try {
                 const res = await fetch('/api/status');
+                if (!res.ok) return;
                 const data = await res.json();
 
-                document.getElementById('matchCount').innerText = data.totalMatches.toLocaleString();
+                // 1. Data Counts
+                const highMatches = getProp(data, 'highMmrMatches') || 0;
+                document.getElementById('divineCount').innerText = highMatches.toLocaleString();
 
-                const ind = document.getElementById('statusIndicator');
-                if (data.isRunning) {
-                    ind.className = "text-[10px] px-2 py-1 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1.5";
-                    ind.innerHTML = `<div class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div> Active`;
+                // 2. Fetcher Status
+                isFetcherRunning = getProp(data, 'isRunning');
+                const fetcherBtn = document.getElementById('btnFetcher');
+                const dot = document.getElementById('fetcherStatusDot');
+                const fText = document.getElementById('fetcherText');
+
+                if (isFetcherRunning) {
+                    dot.className = "w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse";
+                    fText.innerText = "FETCHER: ON";
+                    fText.className = "text-emerald-400";
+                    fetcherBtn.className = "bg-emerald-900/30 hover:bg-emerald-900/50 border border-emerald-500/20 text-emerald-400 py-2 rounded text-xs font-bold transition flex items-center justify-center gap-2";
                 } else {
-                    ind.className = "text-[10px] px-2 py-1 rounded bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-1.5";
-                    ind.innerHTML = `<div class="w-1.5 h-1.5 rounded-full bg-slate-500"></div> Idle`;
+                    dot.className = "w-1.5 h-1.5 rounded-full bg-slate-500";
+                    fText.innerText = "FETCHER: OFF";
+                    fText.className = "text-slate-400";
+                    fetcherBtn.className = "bg-slate-800 hover:bg-slate-700 text-slate-300 py-2 rounded text-xs font-bold transition flex items-center justify-center gap-2";
                 }
 
-                const train = data.training;
-                const bar = document.getElementById('trainProgress');
-                const btn = document.getElementById('btnTrain');
-                const countLabel = document.getElementById('modelTrainedCount');
-                const accLabel = document.getElementById('modelAccuracy');
+                // 3. Model Training Status
+                const trainObj = getProp(data, 'training');
+                if (trainObj) {
+                    const isTraining = getProp(trainObj, 'isTraining');
+                    const progress = getProp(trainObj, 'progressPercent') || 0;
+                    const count = getProp(trainObj, 'lastTrainedOnCount') || 0;
+                    const acc = getProp(trainObj, 'lastAccuracy') || 0;
+                    // [НОВЕ] Отримуємо AUC
+                    const auc = getProp(trainObj, 'lastAuc') || 0;
 
-                if (train.isTraining) {
-                    bar.style.width = `${train.progressPercent}%`;
-                    btn.disabled = true;
-                    btn.innerText = `TRAINING ${train.progressPercent}%`;
-                    btn.classList.add('opacity-50', 'cursor-not-allowed');
-                    countLabel.innerText = "Training...";
-                    accLabel.innerText = "";
-                } else {
-                    bar.style.width = '0%';
-                    btn.disabled = false;
-                    btn.innerText = "RETRAIN MODEL";
-                    btn.classList.remove('opacity-50', 'cursor-not-allowed');
+                    const btnTrain = document.getElementById('btnTrain');
+                    const barBox = document.getElementById('trainProgressBox');
+                    const bar = document.getElementById('trainProgress');
+                    const countLabel = document.getElementById('modelTrainedCount');
+                    const accLabel = document.getElementById('modelAccuracy');
+                    // [НОВЕ] Елемент для AUC
+                    const aucLabel = document.getElementById('modelAuc');
 
-                    if (train.lastTrainedOnCount > 0) {
-                        countLabel.innerText = `Trained on ${train.lastTrainedOnCount.toLocaleString()} matches`;
-                        if (train.lastAccuracy > 0) {
-                            accLabel.innerText = `Accuracy: ${(train.lastAccuracy * 100).toFixed(1)}%`;
-                            accLabel.className = "text-[10px] text-emerald-400 mt-0.5 font-bold";
-                        }
+                    if (isTraining) {
+                        btnTrain.disabled = true;
+                        btnTrain.innerText = `TRAINING ${progress}%`;
+                        btnTrain.className = "bg-slate-800 text-slate-500 py-2 rounded text-xs font-bold cursor-not-allowed border border-slate-700 animate-pulse";
+                        barBox.classList.remove('hidden');
+                        bar.style.width = `${progress}%`;
                     } else {
-                        countLabel.innerText = "Not Trained";
-                        accLabel.innerText = "";
+                        btnTrain.disabled = false;
+                        btnTrain.innerText = "RETRAIN MODEL";
+                        btnTrain.className = "bg-indigo-600 hover:bg-indigo-500 text-white py-2 rounded text-xs font-bold transition";
+                        barBox.classList.add('hidden');
+                        bar.style.width = '0%';
+
+                        if (count > 0) {
+                            countLabel.innerText = count.toLocaleString();
+                            if (acc > 0) accLabel.innerText = `${(acc * 100).toFixed(1)}%`;
+                            // [НОВЕ] Відображаємо AUC
+                            if (auc > 0 && aucLabel) aucLabel.innerText = auc.toFixed(3);
+                        } else {
+                            countLabel.innerText = "0";
+                            accLabel.innerText = "--%";
+                            if (aucLabel) aucLabel.innerText = "--";
+                        }
                     }
                 }
             } catch (e) { }
         }
 
-        async function toggleFetcher(run) {
-            await fetch(run ? '/api/fetcher/start' : '/api/fetcher/stop', { method: 'POST' });
-            uiLog(run ? "Data collection started" : "Data collection stopped");
+        async function toggleFetcher() {
+            // Toggle based on current state
+            const action = isFetcherRunning ? 'stop' : 'start';
+            await fetch(`/api/fetcher/${action}`, { method: 'POST' });
             refreshStatus();
         }
 
         async function startTraining() {
-            if (confirm("Start training?")) {
+            if (confirm("Start training on Divine+ matches?")) {
                 await fetch('/api/train', { method: 'POST' });
-                uiLog("Training sequence initiated");
                 refreshStatus();
             }
+        }
+
+        // --- DRAFTING & UI LOGIC ---
+        function renderBoard() { renderTeam('radiant'); renderTeam('dire'); updateStats(); }
+        function renderTeam(team) {
+            const container = document.getElementById(`${team}Slots`);
+            container.innerHTML = '';
+            draft[team].forEach((hero, idx) => {
+                const isActive = activeSlot.team === team && activeSlot.index === idx;
+                const el = document.createElement('div');
+                el.className = `h-14 rounded border flex items-center px-2 cursor-pointer transition-all relative overflow-hidden group select-none ${isActive ? `slot-active border-${team === 'radiant' ? 'emerald' : 'red'}-500/50 bg-white/5` : 'border-white/5 bg-white/5 hover:bg-white/10 hover:border-white/10'}`;
+                el.onclick = (e) => { if (!e.target.closest('.remove-btn')) { activeSlot = { team, index: idx }; renderBoard(); } };
+                if (hero) {
+                    const attrIcon = ATTR_ICONS[hero.attr] || 'hero_universal.png';
+                    el.innerHTML = `<img src="${hero.img}" class="w-20 h-12 object-cover rounded shadow bg-black mr-3 border border-white/10"><div class="flex-1 min-w-0 flex flex-col justify-center"><div class="font-bold text-xs text-slate-200 truncate">${hero.name}</div><div class="flex items-center gap-1.5 mt-0.5"><img src="https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/icons/${attrIcon}" class="w-3 h-3 opacity-70"><span class="text-[9px] text-slate-500 uppercase tracking-wide">${hero.attack}</span></div></div><button onclick="removeHero('${team}', ${idx}); event.stopPropagation()" class="remove-btn absolute right-2 text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition"><i class="fa-solid fa-xmark"></i></button>`;
+                } else {
+                    el.innerHTML = `<div class="w-20 h-12 rounded bg-black/20 flex items-center justify-center mr-3 text-slate-700 border border-white/5 border-dashed"><i class="fa-solid fa-plus text-[10px]"></i></div><span class="text-[10px] text-slate-700 uppercase font-bold tracking-wider">Empty</span>`;
+                }
+                container.appendChild(el);
+            });
+        }
+        function renderPicker() {
+            const grid = document.getElementById('heroPickerGrid');
+            const search = document.getElementById('heroSearch').value.toLowerCase();
+            grid.innerHTML = '';
+            document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+            if (activeFilter) document.getElementById(`filter-${activeFilter}`).classList.add('active'); else document.getElementById('filter-clear').classList.add('active');
+            const pickedIds = [...draft.radiant, ...draft.dire].filter(h => h).map(h => h.id);
+            allHeroes.forEach(hero => {
+                if (search && !hero.name.toLowerCase().includes(search)) return;
+                if (activeFilter && hero.attr !== activeFilter) return;
+                const isPicked = pickedIds.includes(hero.id);
+                const card = document.createElement('div');
+                card.className = `relative aspect-video bg-slate-800 rounded overflow-hidden cursor-pointer border border-transparent transition-transform hover:scale-105 hover:border-indigo-400 hover:z-10 ${isPicked ? 'opacity-20 grayscale pointer-events-none' : ''}`;
+                card.onclick = () => pickHero(hero);
+                const attrIcon = ATTR_ICONS[hero.attr];
+                card.innerHTML = `<img src="${hero.img}" loading="lazy" class="w-full h-full object-cover"><div class="absolute bottom-0 w-full bg-black/80 text-[9px] text-center text-slate-300 py-0.5 truncate px-1 pointer-events-none">${hero.name}</div><img src="https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react/icons/${attrIcon}" class="absolute top-1 left-1 w-3 h-3 drop-shadow-md">`;
+                grid.appendChild(card);
+            });
+        }
+        function setFilter(attr) { activeFilter = attr; renderPicker(); }
+        function pickHero(hero) {
+            draft[activeSlot.team][activeSlot.index] = hero;
+            let nextIdx = -1;
+            for (let i = activeSlot.index + 1; i < 5; i++) if (draft[activeSlot.team][i] === null) { nextIdx = i; break; }
+            if (nextIdx !== -1) activeSlot.index = nextIdx;
+            else { const other = activeSlot.team === 'radiant' ? 'dire' : 'radiant'; for (let i = 0; i < 5; i++) if (draft[other][i] === null) { activeSlot = { team: other, index: i }; break; } }
+            renderBoard(); renderPicker(); predict();
+        }
+        function removeHero(team, idx) {
+            draft[team][idx] = null; activeSlot = { team, index: idx };
+            renderBoard(); renderPicker(); predict();
+        }
+        function filterHeroes() { renderPicker(); }
+        function resetDraft() { draft.radiant.fill(null); draft.dire.fill(null); activeSlot = { team: 'radiant', index: 0 }; renderBoard(); renderPicker(); updateBar(0.5); document.getElementById('predictionReason').innerText = "Draft teams..."; document.getElementById('factorsList').innerHTML = ""; }
+        function onRankChange(el) { predict(); }
+        function updateStats() {
+            const rStats = calcStats(draft.radiant); const dStats = calcStats(draft.dire);
+            const pct = v => `${(v / 5) * 100}%`;
+            document.getElementById('statStunR').style.width = pct(rStats.stuns); document.getElementById('statStunD').style.width = pct(dStats.stuns);
+            document.getElementById('statMeleeR').style.width = pct(rStats.melee); document.getElementById('statMeleeD').style.width = pct(dStats.melee);
+            document.getElementById('statCoreR').style.width = pct(rStats.cores); document.getElementById('statCoreD').style.width = pct(dStats.cores);
+            renderAttrBar('attrBarRadiant', rStats.attrs); renderAttrBar('attrBarDire', dStats.attrs);
+        }
+        function calcStats(arr) {
+            let s = { stuns: 0, melee: 0, cores: 0, attrs: { str: 0, agi: 0, int: 0, all: 0 } };
+            arr.forEach(h => { if (!h) return; if (h.roles.includes('Disabler')) s.stuns++; if (h.attack === 'Melee') s.melee++; if (h.roles.includes('Carry')) s.cores++; if (s.attrs[h.attr] !== undefined) s.attrs[h.attr]++; });
+            return s;
+        }
+        function renderAttrBar(id, attrs) {
+            const el = document.getElementById(id); el.innerHTML = '';
+            const add = (c, cls) => { if (c > 0) { const d = document.createElement('div'); d.className = `h-full ${cls}`; d.style.width = `${(c / 5) * 100}%`; el.appendChild(d); } };
+            add(attrs.str, 'bg-red-500'); add(attrs.agi, 'bg-green-500'); add(attrs.int, 'bg-blue-500'); add(attrs.all, 'bg-purple-500');
+        }
+        async function predict() {
+            const rIds = draft.radiant.filter(h => h).map(h => h.id); const dIds = draft.dire.filter(h => h).map(h => h.id);
+            if (rIds.length === 0 && dIds.length === 0) return;
+            try {
+                const res = await fetch('/api/predict', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+                        rank: parseInt(document.getElementById('rankSelect').value), radiant: rIds, dire: dIds, radiantLanes: [0, 0, 0, 0, 0], direLanes: [0, 0, 0, 0, 0]
+                    })
+                });
+                const data = await res.json();
+                const prob = getProp(data, 'radiantWinProbability') || getProp(data, 'RadiantWinProbability');
+                const reason = getProp(data, 'reason') || getProp(data, 'Reason');
+                const factors = getProp(data, 'factors') || getProp(data, 'Factors') || [];
+                updateBar(prob);
+                document.getElementById('predictionReason').innerText = reason;
+                const list = document.getElementById('factorsList'); list.innerHTML = '';
+                factors.sort((a, b) => Math.abs(b.impact || b.Impact) - Math.abs(a.impact || a.Impact));
+                factors.slice(0, 5).forEach(f => {
+                    const hid = f.heroId || f.HeroId; const imp = f.impact || f.Impact;
+                    const h = allHeroes.find(x => x.id === hid);
+                    if (h) {
+                        const row = document.createElement('div'); row.className = "flex flex-col gap-0.5";
+                        const col = imp > 0 ? 'bg-emerald-500' : 'bg-red-500'; const txt = imp > 0 ? 'text-emerald-400' : 'text-red-400';
+                        row.innerHTML = `<div class="flex justify-between text-[10px] text-slate-400"><span>${h.name}</span><span class="${txt} font-bold">${imp > 0 ? '+' : ''}${(imp * 100).toFixed(1)}%</span></div><div class="w-full h-1 bg-slate-800 rounded overflow-hidden"><div class="h-full ${col}" style="width:${Math.min(Math.abs(imp) * 500, 100)}%"></div></div>`;
+                        list.appendChild(row);
+                    }
+                });
+            } catch (e) { }
+        }
+        function updateBar(prob) {
+            const pct = Math.round(prob * 100);
+            const rBar = document.getElementById('radiantBar'); const dBar = document.getElementById('direBar');
+            rBar.style.width = `${pct}%`; dBar.style.width = `${100 - pct}%`;
+            rBar.innerText = `${pct}%`; dBar.innerText = `${100 - pct}%`;
+            if (pct > 55) { rBar.className = "h-full bg-gradient-to-r from-emerald-900 to-emerald-500 flex items-center justify-start pl-4 font-display font-bold text-xl text-white transition-all duration-700 whitespace-nowrap"; dBar.className = "h-full bg-gradient-to-l from-red-900 to-red-500 flex items-center justify-end pr-4 font-display font-bold text-xl text-white transition-all duration-700 whitespace-nowrap opacity-40"; }
+            else if (pct < 45) { rBar.className = "h-full bg-gradient-to-r from-emerald-900 to-emerald-500 flex items-center justify-start pl-4 font-display font-bold text-xl text-white transition-all duration-700 whitespace-nowrap opacity-40"; dBar.className = "h-full bg-gradient-to-l from-red-900 to-red-500 flex items-center justify-end pr-4 font-display font-bold text-xl text-white transition-all duration-700 whitespace-nowrap"; }
+            else { rBar.className = "h-full bg-gradient-to-r from-emerald-900 to-emerald-500 flex items-center justify-start pl-4 font-display font-bold text-xl text-white transition-all duration-700 whitespace-nowrap opacity-80"; dBar.className = "h-full bg-gradient-to-l from-red-900 to-red-500 flex items-center justify-end pr-4 font-display font-bold text-xl text-white transition-all duration-700 whitespace-nowrap opacity-80"; }
         }
 
         init();
